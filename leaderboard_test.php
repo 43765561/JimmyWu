@@ -1,5 +1,9 @@
 <?php
 include_once("User.php");
+require_once("MySQL.php");
+include_once("MarketData.php");
+date_default_timezone_set("America/Vancouver");
+
 ?>
 
 <!DOCTYPE html>
@@ -11,64 +15,48 @@ include_once("User.php");
 
 <body>
 <?php
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "cryptotrade";
- 
-$conn = new mysqli($servername, $username, $password, $dbname);
+$sql = new MySQL(DB_HOST, DB_USER, DB_PASS, DB_DB);
+$user = new User();
+$market = new MarketData();
+$stotal_test = 1;
 
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-} 
-		echo "<h1>Upcoming Competition</h1>";
-		$query = "SELECT id, startTimestamp, endTimestamp, startAmount
-		FROM competitions
-		WHERE UNIX_TIMESTAMP(startTimestamp) > UNIX_TIMESTAMP(now())
-		ORDER BY UNIX_TIMESTAMP(startTimestamp)";
-		$result = $conn->query($query);
+$user->setId("jon"); 
+echo "<h1>Upcoming Competition</h1>";
+$qry = "SELECT id, startTimestamp, endTimestamp, startAmount
+	FROM competitions
+	WHERE UNIX_TIMESTAMP(startTimestamp) > UNIX_TIMESTAMP(now())
+	ORDER BY UNIX_TIMESTAMP(startTimestamp)";
+$upcoming = $sql->query($qry,true);
+if ($sql->num_rows() > 0) {
+	echo "<table><tr><th>CompetitionID</th><th>Start</th><th>End</th><th>initCapital</th><th>   </th></tr>";
 
-	if ($result->num_rows > 0) {
-		echo "<table><tr><th>CompetitionID</th><th>Start</th><th>End</th><th>initCapital</th><th>   </th></tr>";
-		while($upcoming = $result->fetch_assoc()) {
-		echo "<tr><td>".$upcoming["id"]."</td><td>".$upcoming["startTimestamp"]."</td><td>".$upcoming["endTimestamp"]."</td><td>".$upcoming["startAmount"]."</td><td><button id='button' onclick='changeFontSize(this)'>Join</button></td></tr>";
-		}
-		echo "</table>";
-		echo "<div><p id='demo'>test</p></div>";
-	} else {
-    	echo "There is no upcoming event";
+	echo "<tr><td>".$upcoming[0]["id"]."</td><td>".$upcoming[0]["startTimestamp"]."</td>
+	<td>".$upcoming[0]["endTimestamp"]."</td><td>".$upcoming[0]["startAmount"]."</td>
+	<td><button id='button' onclick='joincompetition(this)'>Join</button></td></tr>";
+
+	echo "</table>";
+} else {
+	echo "There is no upcoming event";
+}
+
+	echo "<h1>Current Competition</h1>";
+
+    $cquery="SELECT t.userID AS userID,t.symbol AS symbol,t.amount AS amount,t.competitionID AS competitionID,b.USD AS balance FROM trades t JOIN balances b WHERE t.competitionID = getCurrentComp() AND t.userID = b.userID AND isClosed = 1 GROUP BY t.userID,t.symbol,t.competitionID";
+
+	$result = $sql->query($cquery,true);
+	$price = array();
+
+	$prices = json_decode($market->getAllPrices(),true);
+	foreach( $prices as $key => $item )
+	{
+		$price[$item['symbol']] = $item['price'];
 	}
 
-		echo "<h1>Current Competition</h1>";
+	for ($i=0; $i < $sql->num_rows(); $i++){
+		echo $stotal_test;//$price[$result[$i]['symbol']."USDT"]*$result[$i]['amount'];
+	}
 
-	$query = "SELECT (@count := @count + 1) AS Rank, userID, totalpl, percent,compeID FROM (SELECT userID,(SUM(stotal) + balance - startA) AS totalpl,(SUM(stotal) + balance - startA)/ startA*100 AS percent, compeID, SUM(stotal) AS total, balance 
-		FROM (SELECT t.userID AS userID,t.symbol AS symbol, SUM( t.amount * t.price) AS stotal,t.competitionID AS compeID,b.USD AS balance, c.startAmount AS startA
-		FROM trades t JOIN balances b JOIN competitions c 
-		WHERE t.userID = b.userID AND t.competitionID = b.competitionID AND t.isClosed = 0 AND UNIX_TIMESTAMP(c.endTimestamp) > UNIX_TIMESTAMP(now()) AND UNIX_TIMESTAMP(c.startTimestamp) < UNIX_TIMESTAMP(now()) 
-		GROUP BY t.symbol,t.userID,t.competitionID) AS table1
-        GROUP BY userID
-        ORDER BY totalpl DESC) AS table2
-        CROSS JOIN (SELECT @count := 0) params";
-		$result = $conn->query($query);
-
-		if ($result->num_rows > 0) {
-    		echo "<table><tr><th>Rank</th><th>UserId</th><th>P/L</th></tr>";
-    		$i = 0;
-
-    		while(($row = $result->fetch_assoc()) && ($i < 10)) {
-        		echo "<tr><td>".$row["Rank"]."</td><td>".$row["userID"]."</td><td>". sprintf("%+.3f",$row["totalpl"]). "USD/(". sprintf("%+.3f",$row["percent"])."%)</td></tr>";
-        		$i++;
-    		}
-    		echo "</table>";
-		} else {
-    		echo "No Ongoing Competition";
-		}
-
-		echo "<div id = 'links'> </div>";
-		echo "<h2>Your Rank</h2>";
-		echo "<table><tr><th>Rank</th><td>UserRank</td></tr></table>";
-
-		echo "<h1>Passed Competition Result</h1>";
+echo "<h1>Passed Competition Result</h1>";
 ?>
 
 <form id = "leaderboardForm" action = "showleaderboard.php" method="post">
@@ -80,12 +68,13 @@ if ($conn->connect_error) {
 		FROM competitions
 		WHERE UNIX_TIMESTAMP(endTimestamp) < UNIX_TIMESTAMP(now())
 		ORDER BY UNIX_TIMESTAMP(endTimestamp) DESC";
-		$result = $conn->query($query);
+		$result = $sql->query($query,true);
 
 
-		if ($result->num_rows > 0){
-			while($row = $result->fetch_array()) {
-				echo "<option value = ". $row["id"]. "> Competition ". $row["id"]. "</option>;";
+		if ($sql->num_rows() > 0){
+			for ($i=0; $i < $sql->num_rows(); $i++) {
+				echo "<option value = ". $result[$i]['id']. "> Competition ". $result[$i]['id']. "</option>;";
+				
 			}
 		}
 		?>
@@ -108,29 +97,36 @@ if ($conn->connect_error) {
 		xhr.send(value);
 	}
 
-	function changeFontSize(target) {
-  		var demo = document.getElementById("demo");
-  		var computedStyle = window.getComputedStyle
-   		    ? getComputedStyle(demo) 
-      		: demo.currentStyle;     
-  		var fontSize;
-
-  		if (computedStyle) {
-    		fontSize = parseFloat(computedStyle && computedStyle.fontSize);
-
-    		if (target == document.getElementById("button")) {
-    		    fontSize += 5;
-    		} else if (target == document.getElementById("button2")) {
-     		   fontSize -= 5;
-     		}
-      		demo.style.fontSize = fontSize + "px";
-    	}
+	function joincompetition(target) {
+		var userIdString="<?php echo $user->getId(); ?>";
+		var upcoming = "<?php echo $upcoming[0]['id']; ?>";
+		var initCapital = "<?php echo $upcoming[0]['startAmount']; ?>";
+		alert(upcoming);
+		if (userIdString == null){
+			document.location.href = 'registration/login.php';
+		} else {
+			var data = JSON.stringify({
+    			userID: userIdString,
+    			competitionID : upcoming,
+    			USD: initCapital,
+			})
+			var xhr = new XMLHttpRequest();
+			xhr.open('POST', 'joincompe.php',true);
+			xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+			xhr.send(data);
+			xhr.onreadystatechange = function() {
+    			if (xhr.readyState === 4){
+        			document.getElementById('Test').innerHTML = xhr.responseText;
+    			}
+			};
+		}
 	}
 
 </script>
 
 <br>
 <div id = "Leaderboard"> Leaderboard...</div>
+<div id = "Test"> Test</div>
 
 </body>
 </html>

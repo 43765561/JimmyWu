@@ -1,47 +1,70 @@
 <!DOCTYPE html>
 <?php
+	include_once("User.php");
+	include_once("MarketData.php");
+	date_default_timezone_set("America/Vancouver");
+
+	$sql = new MySQL(DB_HOST, DB_USER, DB_PASS, DB_DB);
+	$user = new User();
+	$user->setId('ben');
+
 	$value = file_get_contents("php://input");
 
-	$servername = "localhost";
-	$username = "root";
-	$password = "";
-	$dbname = "cryptotrade";
+	$title = $sql->where('id', $value)->get('competitions');
 
-	$conn = new mysqli($servername, $username, $password, $dbname);
-
-	if ($conn->connect_error) {
-    	die("Connection failed: " . $conn->connect_error);
-	}
-
-	$query = "SELECT id, startTimestamp, endTimestamp, startAmount
-	FROM competitions 
-	WHERE id = ".$value;
-	$res = $conn->query($query);
-
-	if ($res->num_rows > 0) {
-		while($title = $res->fetch_assoc()){
-			echo "<table><tr><th>Competition ".$title["id"]."</th><th>".$title["startTimestamp"]."</th><th>".$title["endTimestamp"]."</th><th>initCapital ".$title["startAmount"]."</th></tr></table>";
+	if ($sql->num_rows() > 0) {
+		for ($i=0; $i < $sql->num_rows(); $i++) {
+			echo "<table><tr><th>Competition ".$title[$i]["id"]."</th><th>".$title[$i]["startTimestamp"]."</th><th>".$title[$i]["endTimestamp"]."</th><th>initCapital ".$title[$i]["startAmount"]."</th></tr></table>";
 		}
 	}
 
-	$query = "SELECT (@count := @count + 1) AS Rank, b.userid, b.usd-c.startAmount AS pl, (b.usd-c.startAmount) / c.startAmount*100 AS percent 
+	$query = "SELECT (@count := @count + 1) AS Rank, b.userid, (b.usd-c.startAmount) / c.startAmount*100 AS percent 
 	FROM balances b JOIN competitions c ON b.competitionID = c.id 
 	CROSS JOIN (SELECT @count := 0) params
 	WHERE competitionID = ".$value." ORDER BY USD DESC";
-	$result = $conn->query($query);
-
+	$result = $sql->query($query,true);
 	
-	if ($result->num_rows > 0) {
+	if ($sql->num_rows() > 0) {
     	echo "<table><tr><th>Rank</th><th>UserId</th><th>P/L</th></tr>";
-    	$i = 0;
-    	while(($row = $result->fetch_assoc()) && ($i < 10)) {
-        	echo "<tr><td>".$row["Rank"]."</td><td>".$row["userid"]."</td><td>". sprintf("%+.3f",$row["pl"]). "USD/(". sprintf("%+.3f",$row["percent"])."%)</td></tr>";
-        	$i++;
+    	if ($sql->num_rows() < 10) {
+    		for ($i=0; $i < $sql->num_rows(); $i++) {
+        		echo "<tr><td>".$result[$i]["Rank"]."</td><td>".$result[$i]["userid"]."</td>
+        		<td>". sprintf("%+.3f",$result[$i]["percent"])."%)</td></tr>";
+    		}
+    	} else {
+    		for ($i=0; $i < 10; $i++) {
+        		echo "<tr><td>".$result[$i]["Rank"]."</td><td>".$result[$i]["userid"]."</td>
+        		<td>". sprintf("%+.3f",$result[$i]["percent"])."%)</td></tr>";
+    	}
+    	if ($user->getId() == 'ben'){
+    		$id = $sql->where('userid',$user->getId())->query($query,true);
+    		echo "<tr><td>".$id[$i]["Rank"]."</td><td>".$id[$i]["userid"]."</td>
+        		<td>". sprintf("%+.3f",$result[$i]["percent"])."%)</td></tr>";
     	}
     	echo "</table>";
+    	}
+	} 
+	if ($sql->num_rows() > 0) {
+    	echo "<table><tr><th>Your Rank</th><th>UserId</th><th>P/L</th></tr>";
+    	if ($sql->num_rows() < 10) {
+    		for ($i=0; $i < $sql->num_rows(); $i++) {
+    			if ($result[$i]["userid"] == $user->getId()){
+        		echo "<tr><td>".$result[$i]["Rank"]."</td><td>".$result[$i]["userid"]."</td>
+        		<td>". sprintf("%+.3f",$result[$i]["percent"])."%</td></tr>";
+        		}
+    		}
+    	} else {
+    		for ($i=0; $i < 10; $i++) {
+    			if ($result[$i]["userid"] == $user->getId()){
+        			echo "<tr><td>".$result[$i]["Rank"]."</td><td>".$result[$i]["userid"]."</td>
+        			<td>". sprintf("%+.3f",$result[$i]["percent"])."%</td></tr>";
+        		}
+    	}
+    	echo "</table>";
+    	}
 	} 
 ?>
-			
+
 <html>
 	<body>
 
@@ -49,4 +72,3 @@
 		</div>
 	</body>
 </html>
-
