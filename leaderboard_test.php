@@ -19,8 +19,21 @@ $sql = new MySQL(DB_HOST, DB_USER, DB_PASS, DB_DB);
 $user = new User();
 $market = new MarketData();
 $stotal_test = 1;
+$currentUser = '';
+$currentPl = 0;
+$price = array();
+$positions = $sql->get('positions');
+$competitionID = $sql->query("SELECT getCurrentComp() AS r;", true);
 
-$user->setId("jon"); 
+$prices = json_decode($market->getAllPrices(),true);
+foreach( $prices as $key => $item )
+{
+	$price[$item['symbol']] = $item['price'];
+}
+
+var_dump($market->getAllPrices());
+$user->setId("jon");
+
 echo "<h1>Upcoming Competition</h1>";
 $qry = "SELECT id, startTimestamp, endTimestamp, startAmount
 	FROM competitions
@@ -41,20 +54,26 @@ if ($sql->num_rows() > 0) {
 
 	echo "<h1>Current Competition</h1>";
 
-    $cquery="SELECT t.userID AS userID,t.symbol AS symbol,t.amount AS amount,t.competitionID AS competitionID,b.USD AS balance FROM trades t JOIN balances b WHERE t.competitionID = getCurrentComp() AND t.userID = b.userID AND isClosed = 1 GROUP BY t.userID,t.symbol,t.competitionID";
+    $cquery="SELECT userID, competitionID USD FROM  balances  WHERE competitionID = getCurrentComp() GROUP BY userID";
 
 	$result = $sql->query($cquery,true);
-	$price = array();
 
-	$prices = json_decode($market->getAllPrices(),true);
-	foreach( $prices as $key => $item )
-	{
-		$price[$item['symbol']] = $item['price'];
-	}
+	if ($sql->num_rows() > 0){
+			for ($i=0; $i < $sql->num_rows(); $i++) {
+				$currentUser = $result[$i]['userID'];
+				if ($positions[0] != null) {
+					for ($i=0; $i < count($positions); $i++) { 
+						if ($positions[$i]['userID'] == $currentUser && $positions[$i]['competitionID'] ==$competitionID) {
+						$currentPl += ($price[$positions[$i]['symbol']."USDT"]-$positions[$i]['avgPrice'])*$positions[$i]['amount'];
+						}
+					}
+					echo $currentPl;
+				}	
+			}
+		}
 
-	for ($i=0; $i < $sql->num_rows(); $i++){
-		echo $stotal_test;//$price[$result[$i]['symbol']."USDT"]*$result[$i]['amount'];
-	}
+	echo $stotal_test;//$price[$result[$i]['symbol']."USDT"]*$result[$i]['amount'];
+
 
 echo "<h1>Passed Competition Result</h1>";
 ?>
